@@ -28,12 +28,14 @@ import (
 	"mynewt.apache.org/newt/newt/downloader"
 	"mynewt.apache.org/newt/newt/interfaces"
 	"mynewt.apache.org/newt/newt/newtutil"
+	"mynewt.apache.org/newt/newt/porcelain"
 	"mynewt.apache.org/newt/newt/project"
 	"mynewt.apache.org/newt/newt/repo"
 	"mynewt.apache.org/newt/util"
 )
 
 var infoRemote bool
+var infoPorcelain bool
 
 func newRunCmd(cmd *cobra.Command, args []string) {
 	if len(args) < 1 {
@@ -146,6 +148,11 @@ func upgradeRunCmd(cmd *cobra.Command, args []string) {
 }
 
 func infoRunCmd(cmd *cobra.Command, args []string) {
+	if infoPorcelain {
+		infoPorcelainRunCmd(cmd, args)
+		return
+	}
+
 	newtutil.PrintNewtVersion()
 
 	proj := TryGetProject()
@@ -207,6 +214,27 @@ func infoRunCmd(cmd *cobra.Command, args []string) {
 	}
 }
 
+// infoPorcelainRunCmd prints the project info in a format meant for scripts.
+func infoPorcelainRunCmd(cmd *cobra.Command, args []string) {
+	if len(args) > 0 {
+		NewtUsage(nil, util.NewNewtError("--porcelain does not take arguments"))
+	}
+
+	// Only the requested format goes to stdout.
+	util.Verbosity = util.VERBOSITY_SILENT
+
+	proj := TryGetProject()
+
+	info, err := porcelain.Gather(proj, infoRemote)
+	if err != nil {
+		NewtUsage(nil, err)
+	}
+
+	if err := porcelain.WritePorcelain(os.Stdout, info); err != nil {
+		NewtUsage(nil, util.ChildNewtError(err))
+	}
+}
+
 func AddProjectCommands(cmd *cobra.Command) {
 	upgradeHelpText := ""
 	upgradeHelpEx := "  newt upgrade\n"
@@ -242,8 +270,11 @@ func AddProjectCommands(cmd *cobra.Command) {
 
 	cmd.AddCommand(newCmd)
 
-	infoHelpText := "Show information about the current project."
-	infoHelpEx := "  newt info\n"
+	infoHelpText := "Show information about the current project.\n\n" +
+		"With --porcelain, describe the whole project (repos, " +
+		"targets and packages) in a stable format meant for scripts."
+	infoHelpEx := "  newt info\n" +
+		"  newt info --porcelain\n"
 
 	infoCmd := &cobra.Command{
 		Use:     "info",
@@ -255,6 +286,8 @@ func AddProjectCommands(cmd *cobra.Command) {
 	infoCmd.PersistentFlags().BoolVarP(&infoRemote,
 		"remote", "r", false,
 		"Fetch latest repos to determine if upgrades are required")
+	infoCmd.Flags().BoolVar(&infoPorcelain, "porcelain", false,
+		"Print the project info as stable, line-based text for scripts")
 
 	cmd.AddCommand(infoCmd)
 }
