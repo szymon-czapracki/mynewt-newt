@@ -21,6 +21,8 @@ package porcelain
 
 import (
 	"bytes"
+	"encoding/json"
+	"reflect"
 	"testing"
 )
 
@@ -138,4 +140,61 @@ package @apache-mynewt-core/apps/blinky description Blinks a LED.\nTwice \\ a se
 	if got := buf.String(); got != want {
 		t.Errorf("unexpected output:\n%s\nwant:\n%s", got, want)
 	}
+}
+
+func TestWriteJSON(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteJSON(&buf, testInfo()); err != nil {
+		t.Fatal(err)
+	}
+
+	var got map[string]interface{}
+	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+
+	// The keys are part of the format; renaming any of them breaks readers.
+	keys := map[string][]string{
+		"":         {"format_version", "newt_version", "packages", "project", "repos", "targets"},
+		"project":  {"name", "path"},
+		"repos":    {"commit", "dirty", "error", "installed", "local", "name", "needs_upgrade", "path", "requested", "url"},
+		"targets":  {"name", "path", "repo", "syscfg", "syscfg_errors", "vars"},
+		"packages": {"description", "name", "path", "repo", "type"},
+	}
+	for field, want := range keys {
+		obj := got
+		if field != "" {
+			switch v := got[field].(type) {
+			case []interface{}:
+				obj = v[0].(map[string]interface{})
+			default:
+				obj = v.(map[string]interface{})
+			}
+		}
+		if have := sortedKeys(stringKeys(obj)); !reflect.DeepEqual(have, want) {
+			t.Errorf("keys of %q: got %v, want %v", field, have, want)
+		}
+	}
+
+	setting := got["targets"].([]interface{})[0].(map[string]interface{})["syscfg"].([]interface{})[0].(map[string]interface{})
+	wantSetting := []string{"choices", "default", "description", "history", "name", "package", "restrictions", "state", "type", "value", "value_ref"}
+	if have := sortedKeys(stringKeys(setting)); !reflect.DeepEqual(have, wantSetting) {
+		t.Errorf("keys of syscfg settings: got %v, want %v", have, wantSetting)
+	}
+
+	var info Info
+	if err := json.Unmarshal(buf.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(&info, testInfo()) {
+		t.Errorf("JSON does not round-trip: %+v", info)
+	}
+}
+
+func stringKeys(m map[string]interface{}) map[string]string {
+	s := make(map[string]string, len(m))
+	for k := range m {
+		s[k] = ""
+	}
+	return s
 }

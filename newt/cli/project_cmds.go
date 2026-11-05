@@ -36,6 +36,7 @@ import (
 
 var infoRemote bool
 var infoPorcelain bool
+var infoJson bool
 
 func newRunCmd(cmd *cobra.Command, args []string) {
 	if len(args) < 1 {
@@ -148,8 +149,8 @@ func upgradeRunCmd(cmd *cobra.Command, args []string) {
 }
 
 func infoRunCmd(cmd *cobra.Command, args []string) {
-	if infoPorcelain {
-		infoPorcelainRunCmd(cmd, args)
+	if infoPorcelain || infoJson {
+		infoMachineRunCmd(cmd, args)
 		return
 	}
 
@@ -214,10 +215,15 @@ func infoRunCmd(cmd *cobra.Command, args []string) {
 	}
 }
 
-// infoPorcelainRunCmd prints the project info in a format meant for scripts.
-func infoPorcelainRunCmd(cmd *cobra.Command, args []string) {
+// infoMachineRunCmd prints the project info in a format meant for scripts.
+func infoMachineRunCmd(cmd *cobra.Command, args []string) {
+	if infoPorcelain && infoJson {
+		NewtUsage(nil, util.NewNewtError(
+			"--porcelain and --json cannot be used together"))
+	}
 	if len(args) > 0 {
-		NewtUsage(nil, util.NewNewtError("--porcelain does not take arguments"))
+		NewtUsage(nil, util.NewNewtError(
+			"--porcelain and --json do not take arguments"))
 	}
 
 	// Only the requested format goes to stdout.
@@ -230,7 +236,12 @@ func infoPorcelainRunCmd(cmd *cobra.Command, args []string) {
 		NewtUsage(nil, err)
 	}
 
-	if err := porcelain.WritePorcelain(os.Stdout, info); err != nil {
+	if infoJson {
+		err = porcelain.WriteJSON(os.Stdout, info)
+	} else {
+		err = porcelain.WritePorcelain(os.Stdout, info)
+	}
+	if err != nil {
 		NewtUsage(nil, util.ChildNewtError(err))
 	}
 }
@@ -271,10 +282,11 @@ func AddProjectCommands(cmd *cobra.Command) {
 	cmd.AddCommand(newCmd)
 
 	infoHelpText := "Show information about the current project.\n\n" +
-		"With --porcelain, describe the whole project (repos, " +
+		"With --porcelain or --json, describe the whole project (repos, " +
 		"targets and packages) in a stable format meant for scripts."
 	infoHelpEx := "  newt info\n" +
-		"  newt info --porcelain\n"
+		"  newt info --porcelain\n" +
+		"  newt info --json\n"
 
 	infoCmd := &cobra.Command{
 		Use:     "info",
@@ -288,6 +300,8 @@ func AddProjectCommands(cmd *cobra.Command) {
 		"Fetch latest repos to determine if upgrades are required")
 	infoCmd.Flags().BoolVar(&infoPorcelain, "porcelain", false,
 		"Print the project info as stable, line-based text for scripts")
+	infoCmd.Flags().BoolVar(&infoJson, "json", false,
+		"Print the project info as JSON")
 
 	cmd.AddCommand(infoCmd)
 }

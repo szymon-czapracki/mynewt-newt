@@ -17,13 +17,14 @@
  * under the License.
  */
 
-// Package porcelain describes a project in a format meant for scripts rather
-// than people: "newt info --porcelain".  The format is stable; fields may be
-// added, but existing ones are not renamed or removed without increasing
-// FormatVersion.
+// Package porcelain describes a project in formats meant for scripts rather
+// than people: "newt info --porcelain" and "newt info --json".  Both formats
+// are stable; fields may be added, but existing ones are not renamed or
+// removed without increasing FormatVersion.
 package porcelain
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -50,95 +51,95 @@ const FormatVersion = 1
 // Info is everything the output describes.  Paths are relative to the
 // project's directory, except for the project's own path.
 type Info struct {
-	FormatVersion int
-	NewtVersion   string
-	Project       Project
-	Repos         []Repo
-	Targets       []Target
-	Packages      []Package
+	FormatVersion int       `json:"format_version"`
+	NewtVersion   string    `json:"newt_version"`
+	Project       Project   `json:"project"`
+	Repos         []Repo    `json:"repos"`
+	Targets       []Target  `json:"targets"`
+	Packages      []Package `json:"packages"`
 }
 
 type Project struct {
-	Name string
-	Path string
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 type Repo struct {
-	Name string
-	Path string
+	Name string `json:"name"`
+	Path string `json:"path"`
 	// Whether this is the project itself rather than a dependency.
-	Local bool
-	Url   string
+	Local bool   `json:"local"`
+	Url   string `json:"url"`
 	// The version project.yml asks for; empty if the repo is only a
 	// dependency of another repo.
-	Requested string
+	Requested string `json:"requested"`
 	// The installed version, and its commit; empty if not installed.
-	Installed string
-	Commit    string
+	Installed string `json:"installed"`
+	Commit    string `json:"commit"`
 	// What is modified in the repo's working tree; empty if clean.
-	Dirty string
+	Dirty string `json:"dirty"`
 	// Only known when remote repos were queried.
-	NeedsUpgrade bool
+	NeedsUpgrade bool `json:"needs_upgrade"`
 	// Why the repo's state could not be read, if it could not.
-	Error string
+	Error string `json:"error"`
 }
 
 type Target struct {
-	Name string
-	Repo string
-	Path string
+	Name string `json:"name"`
+	Repo string `json:"repo"`
+	Path string `json:"path"`
 	// The target's variables without the "target." prefix, e.g. "app" and
 	// "bsp", and its "cflags", "cxxflags", "lflags" and "aflags".  Lists
 	// are joined with spaces; empty variables are left out.
-	Vars map[string]string
+	Vars map[string]string `json:"vars"`
 	// All syscfg settings of the target's build, sorted by name, and the
 	// problems that would make "newt build" fail.
-	Syscfg       []Setting
-	SyscfgErrors []string
+	Syscfg       []Setting `json:"syscfg"`
+	SyscfgErrors []string  `json:"syscfg_errors"`
 }
 
 // Setting is one resolved syscfg setting, as "newt target config show"
 // displays it.
 type Setting struct {
-	Name  string
-	Value string
+	Name  string `json:"name"`
+	Value string `json:"value"`
 	// The value from the setting's definition.
-	Default     string
-	Description string
+	Default     string `json:"default"`
+	Description string `json:"description"`
 	// "raw", "task_priority" or "flash_owner".
-	Type string
+	Type string `json:"type"`
 	// "good", "const", "deprecated", "defunct" or "experimental".
-	State string
+	State string `json:"state"`
 	// The package that defines the setting; "newt" for settings newt
 	// injects.
-	Package string
+	Package string `json:"package"`
 	// The setting the value is copied from, if any.
-	ValueRef     string
-	Choices      []string
-	Restrictions []Restriction
+	ValueRef     string        `json:"value_ref"`
+	Choices      []string      `json:"choices"`
+	Restrictions []Restriction `json:"restrictions"`
 	// Where the value comes from, oldest (the definition) first.
-	History []SettingPoint
+	History []SettingPoint `json:"history"`
 }
 
 type Restriction struct {
 	// "notnull", "expr" or "range".
-	Type string
+	Type string `json:"type"`
 	// The expression, or the ranges, e.g. "1..10, 16".
-	Expr string
+	Expr string `json:"expr"`
 }
 
 type SettingPoint struct {
 	// The package that sets the value; "newt" for values newt sets.
-	Source string
-	Value  string
+	Source string `json:"source"`
+	Value  string `json:"value"`
 }
 
 type Package struct {
-	Name        string
-	Type        string
-	Repo        string
-	Path        string
-	Description string
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Repo        string `json:"repo"`
+	Path        string `json:"path"`
+	Description string `json:"description"`
 }
 
 // Gather collects the information about a project.  With remote, the repos'
@@ -365,6 +366,13 @@ func relPath(proj *project.Project, path string) string {
 		return path
 	}
 	return filepath.ToSlash(rel)
+}
+
+// WriteJSON writes the information as one indented JSON object.
+func WriteJSON(w io.Writer, info *Info) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(info)
 }
 
 // WritePorcelain writes the information as lines of the form
